@@ -58,10 +58,11 @@ func (p *PlayerFetcher) FetchUserQuests(username string) ([]Quest, error) {
 		logger.Info("user was cached")
 		return cachedQuests, nil
 	}
-	logger.Info("user was NOT cached", slog.String("reason", err.Error()))
+	logger.Info("user was NOT cached", slog.String("error", err.Error()))
 	u := "https://apps.runescape.com/runemetrics/quests?user=" + username
 	res, err := http.Get(u)
 	if err != nil {
+		logger.Info("could not perform get request", slog.String("error", err.Error()))
 		return nil, err
 	}
 
@@ -69,13 +70,13 @@ func (p *PlayerFetcher) FetchUserQuests(username string) ([]Quest, error) {
 	var decoded ResponseBody
 	err = json.NewDecoder(res.Body).Decode(&decoded)
 	if err != nil {
-		logger.Error("could not decode body", slog.Int("status", res.StatusCode))
+		logger.Info("could not decode body", slog.Int("status", res.StatusCode), slog.String("error", err.Error()))
 		return nil, err
 	}
 
 	err = p.updateUserCache(username, decoded.Quests)
 	if err != nil {
-		logger.Error("could not update usercache")
+		logger.Info("could not update usercache", slog.String("error", err.Error()))
 		return nil, err
 	}
 

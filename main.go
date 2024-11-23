@@ -60,7 +60,7 @@ func main() {
 			logger.Info("fetching metrics", slog.String("rsn", name))
 			quests, err := fetcher.FetchUserQuests(name)
 			if err != nil {
-				slog.Info("failed fetching metrics", slog.String("rsn", name))
+				slog.Info("failed fetching metrics", slog.String("rsn", name), slog.String("error", err.Error()))
 				continue
 			}
 			logger.Info("fetched quests", slog.String("rsn", name), slog.Int("amount", len(quests)))
