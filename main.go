@@ -7,18 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/a-h/templ"
+	"github.com/google/uuid"
 	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 )
 
 func main() {
-	//fetcher, err := runemetrics.NewPlayerFetcher()
-	//if err != nil {
-	//	log.Println("could create player fetcher, exiting.")
-	//	return
-	//}
-
 	m := http.NewServeMux()
 
 	fetcher, err := runemetrics.NewPlayerFetcher()
@@ -29,17 +25,20 @@ func main() {
 
 	m.Handle("GET /", templ.Handler(templates.Welcome()))
 	m.HandleFunc("GET /generate", func(w http.ResponseWriter, request *http.Request) {
+		reqID := uuid.New()
+		logger := slog.With(slog.String("requestID", reqID.String()))
 		queryNames := request.URL.Query().Get("names")
 		usernames := strings.Split(queryNames, "\r\n")
+
 		if len(usernames) < 1 {
-			log.Printf("denying request due to no names given")
+			logger.Info("denying request due to no names given")
 
 			http.Redirect(w, request, request.Referer(), 301)
 			return
 		}
 
 		if len(usernames) > 5 {
-			log.Printf("denying request due to too many names given")
+			logger.Info("denying request due to too many names given", slog.Int("amount", len(usernames)))
 
 			http.Redirect(w, request, request.Referer(), 301)
 			return
@@ -47,7 +46,7 @@ func main() {
 		for _, name := range usernames {
 			if len(name) > 12 || len(name) < 1 {
 				// They know what they did
-				log.Printf("denying request due to bad name: %v", name)
+				logger.Info("denying request due to bad name", slog.String("rsn", name))
 				http.Redirect(w, request, request.Referer(), 301)
 				return
 			}
@@ -56,13 +55,15 @@ func main() {
 		availableQuestPairs := make(map[string][]runemetrics.Quest)
 		questDigits := make(map[string]int)
 
+		logger.Info("starting fetcher", slog.String("rsns", strings.Join(usernames, ",")))
 		for _, name := range usernames {
-			log.Printf("fetching metrics for user %s", name)
+			logger.Info("fetching metrics", slog.String("rsn", name))
 			quests, err := fetcher.FetchUserQuests(name)
 			if err != nil {
-				log.Printf("failed fetching metrics for user %s", name)
+				slog.Info("failed fetching metrics", slog.String("rsn", name))
 				continue
 			}
+			logger.Info("fetched quests", slog.String("rsn", name), slog.Int("amount", len(quests)))
 			for _, quest := range quests {
 				if quest.UserEligible && quest.Status != "COMPLETED" {
 					// hacky but here we insert the difficulty indicator
@@ -71,6 +72,7 @@ func main() {
 					questDigits[quest.Title] += 1
 				}
 			}
+			logger.Info("eligible quests", slog.String("rsn", name), slog.Int("amount", len(availableQuestPairs[name])))
 		}
 
 		var availableQuestTitles []string
@@ -81,13 +83,17 @@ func main() {
 			}
 		}
 
+		logger.Info("combined eligible quests", slog.String("rsns", strings.Join(usernames, ",")), slog.Int("amount", len(availableQuestTitles)))
+
+		logger.Info("generating wheel")
 		wheel := wheeler.GenerateWheel(availableQuestTitles)
 
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", strings.Join(usernames, "_")+".wheel"))
+		logger.Info("encoding wheel")
 		err := json.NewEncoder(w).Encode(wheel)
 		if err != nil {
-			log.Printf("could not encode wheel for %v", usernames)
+			logger.Error("could not encode wheel", slog.String("rsns", strings.Join(usernames, ",")))
 			return
 		}
 	})
