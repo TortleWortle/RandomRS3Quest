@@ -1,4 +1,4 @@
-package main
+package wheeler
 
 type ColorSetting struct {
 	Color   string `json:"color"`

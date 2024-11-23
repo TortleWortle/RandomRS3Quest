@@ -1,4 +1,4 @@
-package main
+package runemetrics
 
 import (
 	"encoding/json"
@@ -10,19 +10,12 @@ import (
 	"time"
 )
 
-func NewPlayerFetcher(cache io.ReadWriteSeeker) (PlayerFetcher, error) {
+func NewPlayerFetcher() (PlayerFetcher, error) {
 	pf := PlayerFetcher{
 		Cache:     make(map[string]QuestCacheItem),
-		cacheFile: cache,
 		cacheTime: time.Minute * 5,
 		cacheLock: &sync.RWMutex{},
 	}
-
-	err := pf.readCache()
-	if err != nil {
-		return PlayerFetcher{}, err
-	}
-
 	return pf, nil
 }
 
@@ -48,18 +41,6 @@ func (p *PlayerFetcher) fetchUserQuestsFromCache(username string) ([]Quest, erro
 	return cachedQuests.Quests, nil
 }
 
-func (p *PlayerFetcher) readCache() error {
-	p.cacheLock.Lock()
-	defer p.cacheLock.Unlock()
-	_, err := p.cacheFile.Seek(0, io.SeekStart)
-	if err != nil {
-		return err
-	}
-	err = json.NewDecoder(p.cacheFile).Decode(&p.Cache)
-
-	return err
-}
-
 func (p *PlayerFetcher) updateUserCache(username string, quests []Quest) error {
 	p.cacheLock.Lock()
 	defer p.cacheLock.Unlock()
@@ -67,19 +48,10 @@ func (p *PlayerFetcher) updateUserCache(username string, quests []Quest) error {
 		Quests: quests,
 		Time:   time.Now(),
 	}
-
-	_, err := p.cacheFile.Seek(0, io.SeekStart)
-	if err != nil {
-		return err
-	}
-	err = json.NewEncoder(p.cacheFile).Encode(p.Cache)
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
-func (p *PlayerFetcher) fetchUserQuests(username string) ([]Quest, error) {
+func (p *PlayerFetcher) FetchUserQuests(username string) ([]Quest, error) {
 	cachedQuests, err := p.fetchUserQuestsFromCache(username)
 	if err == nil {
 		log.Printf("user %s was cached", username)
@@ -93,7 +65,7 @@ func (p *PlayerFetcher) fetchUserQuests(username string) ([]Quest, error) {
 	}
 
 	defer res.Body.Close()
-	var decoded RuneMetricsResponseBody
+	var decoded ResponseBody
 	err = json.NewDecoder(res.Body).Decode(&decoded)
 	if err != nil {
 		return nil, err
@@ -113,9 +85,9 @@ type QuestCacheItem struct {
 	Time   time.Time
 }
 
-type RuneMetricsResponseBody struct {
-	Quests []Quest `json:"quests"`
-	//LoggedIn string  `json:"loggedIn"`
+type ResponseBody struct {
+	Quests   []Quest `json:"quests"`
+	LoggedIn string  `json:"loggedIn"`
 }
 
 type Quest struct {
