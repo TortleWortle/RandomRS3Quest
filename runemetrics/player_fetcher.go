@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -53,11 +53,12 @@ func (p *PlayerFetcher) updateUserCache(username string, quests []Quest) error {
 
 func (p *PlayerFetcher) FetchUserQuests(username string) ([]Quest, error) {
 	cachedQuests, err := p.fetchUserQuestsFromCache(username)
+	logger := slog.With(slog.String("rsn", username))
 	if err == nil {
-		log.Printf("user %s was cached", username)
+		logger.Info("user was cached")
 		return cachedQuests, nil
 	}
-	log.Printf("user %s NOT cached, fetching (%v)", username, err)
+	logger.Info("user was NOT cached", slog.String("reason", err.Error()))
 	u := "https://apps.runescape.com/runemetrics/quests?user=" + username
 	res, err := http.Get(u)
 	if err != nil {
@@ -68,11 +69,13 @@ func (p *PlayerFetcher) FetchUserQuests(username string) ([]Quest, error) {
 	var decoded ResponseBody
 	err = json.NewDecoder(res.Body).Decode(&decoded)
 	if err != nil {
+		logger.Error("could not decode body", slog.Int("status", res.StatusCode))
 		return nil, err
 	}
 
 	err = p.updateUserCache(username, decoded.Quests)
 	if err != nil {
+		logger.Error("could not update usercache")
 		return nil, err
 	}
 
